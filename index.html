@@ -1,1 +1,55 @@
+//inspiration:
+// https://www.w3schools.com/js/js_events_keyboard.asp
+// https://www.geeksforgeeks.org/javascript/javascript-date-now-method/
+// https://www.geeksforgeeks.org/javascript/javascript-blob/
+
 <!DOCTYPE html>
+
+
+<html lang="da">
+<head>
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Key press logger</title>
+</head>
+
+  <body>
+    <p>Write the sentance:</p>
+    <p><b>the quick brown fox jumps over the lazy dog</b></p>
+    <textarea id="box" rows="6" cols="60"></textarea>
+    <br>
+    <button id="save">Gem log</button>
+
+
+
+    <script>
+        let log =[];
+        const box = document.getElementById("box");
+
+       // let phase = 1;
+
+        //timestap
+        function rec(type, e) {
+        if (e.repeat) return; 
+            const t = Date.now();
+            const d = new Date(t);
+            const realtime = d.toLocaleTimeString("da-DK") + "." + String(d.getMilliseconds()).padStart(3, "0");
+            log.push({ t: t, realtime: realtime, type: type, key: e.key, code: e.code });
+        }
+
+        box.addEventListener("keydown", (e) => rec("down", e));
+        box.addEventListener("keyup", (e) => rec("up", e));
+
+        document.getElementById("save").addEventListener("click", () => {
+            //Binary Large Objekt 
+            const blob = new Blob([JSON.stringify(log, null, 2)], { type: "application/json" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "keystroke_log_" + Date.now() + ".json";
+            a.click();
+            URL.revokeObjectURL(a.href);
+});
+
+    </script>
+  </body>
+</html>
