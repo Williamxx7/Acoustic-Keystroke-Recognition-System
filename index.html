@@ -1,45 +1,42 @@
 <!DOCTYPE html>
-
-<!-- Inspiration:
-https://www.w3schools.com/js/js_events_keyboard.asp
-https://www.geeksforgeeks.org/javascript/javascript-date-now-method/
-https://www.geeksforgeeks.org/javascript/javascript-blob/ -->
-
-
 <html lang="da">
 <head>
-    <meta charset="UTF-8">  
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Keypress logger</title>
-
-  <style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Training Manager</title>
+    <style>
         body { font-family: sans-serif; margin: 20px; }
+        #bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+        #status { font-weight: bold; }
         #target {
-            font-family: monospace;
-            font-size: 20px;
-            line-height: 1.8;
-            white-space: pre-wrap;
-            background: #2f2f2f;
-            color: #888;
-            padding: 16px;
-            border-radius: 6px;
-            max-width: 700px;
-            margin-bottom: 12px;
+            font-family: monospace; font-size: 20px; line-height: 1.8; white-space: pre-wrap;
+            background: #2f2f2f; color: #888; padding: 16px; border-radius: 6px;
+            max-width: 700px; margin-bottom: 12px;
         }
-        .ok  { color: #ddd; }
+        .ok { color: #ddd; }
         .bad { color: #ff6b6b; text-decoration: underline; }
         .cur { border-bottom: 2px solid #fff; }
     </style>
-
-
 </head>
+<body>
+    <div id="bar">
+        <label>
+            Personer:
+            <select id="person">
+                <option>William</option>
+                <option>Emil</option>
+                <option>Simon</option>
+                <option>Jonas</option>
+            </select>
+        </label>
+        <button id="start" disabled>Start optagelse</button>
+        <button id="stop" disabled>Stop optagelse</button>
+    </div>
 
-  <body>
-    <p>Skriv teksten (<b>·</b> er mellemrum, <b>↵</b> er enter):</p>
-      <div id="target"></div>
-      <button id="new">Ny tekst</button>
-      <button id="save">Gem log</button>
-
+    <p id="status">Forbinder til server...</p>
+    <p>Skriv teksten på tastaturet (<b>·</b> er mellemrum, <b>↵</b> er enter):</p>
+    <div id="target"></div>
+    <button id="new" disabled>Ny tekst</button>
 
     <script>
         const GROUPS = 25;
@@ -47,14 +44,32 @@ https://www.geeksforgeeks.org/javascript/javascript-blob/ -->
         const MAX_LEN = 12;
         const DIGIT_CHANCE = 0.15;
         const ENTER_CHANCE = 0.2;
-
         const LETTERS = "abcdefghijklmnopqrstuvwxyzæøå";
         const DIGITS = "0123456789";
 
-        let log = [];
         let target = "";
         let typed = "";
+        let textId = 0;
+        let advancing = false;
+        let ws = null;
+
+        let state = {
+            recording: false,
+            processing: false,
+            session_id: null,
+            participant: null
+        };
+
         const targetEl = document.getElementById("target");
+        const personEl = document.getElementById("person");
+        const startBtn = document.getElementById("start");
+        const stopBtn = document.getElementById("stop");
+        const newBtn = document.getElementById("new");
+        const statusEl = document.getElementById("status");
+
+        function send(data) {
+            if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
+        }
 
         function randInt(min, max) {
             return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -70,9 +85,7 @@ https://www.geeksforgeeks.org/javascript/javascript-blob/ -->
             for (let g = 0; g < GROUPS; g++) {
                 const len = randInt(MIN_LEN, MAX_LEN);
                 for (let i = 0; i < len; i++) text += randChar();
-                if (g < GROUPS - 1) {
-                    text += Math.random() < ENTER_CHANCE ? "\n" : " ";
-                }
+                if (g < GROUPS - 1) text += Math.random() < ENTER_CHANCE ? "\n" : " ";
             }
             return text;
         }
@@ -85,65 +98,106 @@ https://www.geeksforgeeks.org/javascript/javascript-blob/ -->
                 let cls = "";
                 if (i < typed.length) cls = typed[i] === c ? "ok" : "bad";
                 else if (i === typed.length) cls = "cur";
-                html += '<span class="' + cls + '">' + shown + "</span>";
-                if (c === " ") html += "<wbr>"; 
+                html += `<span class="${cls}">${shown}</span>`;
+                if (c === " ") html += "<wbr>";
             }
             targetEl.innerHTML = html;
         }
 
         function newText() {
+            if (!state.recording) return;
             target = generateText();
             typed = "";
-            log = [];
+            advancing = false;
+            textId++;
             render();
+            send({ type: "text", text_id: textId, text: target });
         }
 
-        // timestamp
-        function rec(type, e) {
-            if (e.repeat) return;
-            const t = Date.now();
-            const d = new Date(t);
-            const realtime = d.toLocaleTimeString("da-DK") + "." + String(d.getMilliseconds()).padStart(3, "0");
-            log.push({ t: t, realtime: realtime, type: type, key: e.key, code: e.code });
-        }
-
-        document.addEventListener("keydown", (e) => {
-            rec("down", e);
-            if (e.ctrlKey || e.metaKey || e.altKey) return;
-
-            if (e.key === "Backspace") {
+        function applyKey(key) {
+            if (key === "Backspace") {
                 typed = typed.slice(0, -1);
-                e.preventDefault();
-            } else if (e.key === "Enter") {
+            } else if (key === "Enter") {
                 if (typed.length < target.length) typed += "\n";
-                e.preventDefault();
-            } else if (e.key.length === 1) {
-                if (typed.length < target.length) typed += e.key;
-                e.preventDefault(); 
+            } else if (key.length === 1) {
+                if (typed.length < target.length) typed += key;
             }
             render();
+            if (typed.length >= target.length && !advancing) {
+                advancing = true;
+                setTimeout(newText, 400);
+            }
+        }
+
+        function updateUi() {
+            const connected = ws?.readyState === WebSocket.OPEN;
+            startBtn.disabled = !connected || state.recording || state.processing;
+            stopBtn.disabled = !connected || !state.recording;
+            newBtn.disabled = !connected || !state.recording;
+            personEl.disabled = state.recording || state.processing;
+
+            if (!connected) statusEl.textContent = "Ikke forbundet til server";
+            else if (state.processing) statusEl.textContent = "Behandler lyd";
+            else if (state.recording) statusEl.textContent = "Optager: " + state.session_id + " (" + state.participant + ")";
+            else statusEl.textContent = "Forbundet. Klar til optagelse";
+        }
+
+        function connect() {
+            if (ws && ws.readyState <= WebSocket.OPEN) return;
+            const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+            ws = new WebSocket(protocol + "//" + location.host + "/");
+
+            ws.onopen = () => {
+                send({ type: "hello" });
+                updateUi();
+            };
+
+            ws.onmessage = (event) => {
+                let msg;
+                try { msg = JSON.parse(event.data); }
+                catch (error) { console.error("Ugyldig besked fra server:", event.data); return; }
+
+                if (msg.type === "state") {
+                    state = msg;
+                    updateUi();
+                } else if (msg.type === "key" && state.recording) {
+                    // Begge events videresendes og gemmes. Kun key_down ændrer den viste tekst.
+                    if (msg.event === "key_down") applyKey(msg.key);
+                } else if (msg.type === "done") {
+                    state.recording = false;
+                    state.processing = false;
+                    updateUi();
+                    statusEl.textContent = "Færdig. Resultater gemt på Pi.";
+                } else if (msg.type === "error") {
+                    statusEl.textContent = "Fejl: " + msg.message;
+                }
+            };
+
+            ws.onclose = () => {
+                ws = null;
+                updateUi();
+                statusEl.textContent = "Forbindelse mistet";
+                setTimeout(connect, 2000);
+            };
+            ws.onerror = () => { statusEl.textContent = "Fejl ved forbindelse til server"; };
+        }
+
+        startBtn.addEventListener("click", () => {
+            target = generateText();
+            typed = "";
+            advancing = false;
+            textId++;
+            render();
+            send({ type: "start", participant: personEl.value, text_id: textId, text: target });
         });
-        document.addEventListener("keyup", (e) => rec("up", e));
 
-        document.getElementById("new").addEventListener("click", (e) => {
-            e.currentTarget.blur();
-            newText();
-        });
+        stopBtn.addEventListener("click", () => send({ type: "stop", session_id: state.session_id }));
+        newBtn.addEventListener("click", newText);
 
-        document.getElementById("save").addEventListener("click", (e) => {
-            e.currentTarget.blur();
-            // Binary Large Object
-            const out = { target: target, typed: typed, log: log };
-            const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = "keystroke_log_" + Date.now() + ".json";
-            a.click();
-            URL.revokeObjectURL(a.href);
-        });
-
-        newText();
-
+        target = generateText();
+        render();
+        updateUi();
+        connect();
     </script>
-  </body>
+</body>
 </html>
