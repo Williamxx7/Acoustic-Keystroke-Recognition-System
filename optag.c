@@ -3,12 +3,14 @@
 
 int main(void){
 
-        snd_pcm_t *pcm_handle;
-        snd_pcm_stream_t stream = SND_PCM_STREAM_CAPTURE;
-        snd_pcm_hw_params_t *parameters;
-		unsigned int samplingRate = 48000;
-		int samplingCloseness;
-        char *pcm_name = "plughw:0,0";
+    snd_pcm_t *pcm_handle;
+    snd_pcm_stream_t stream = SND_PCM_STREAM_CAPTURE;
+    snd_pcm_hw_params_t *parameters;
+	unsigned int samplingRate = 48000;
+	int samplingCloseness;
+    char *pcm_name = "plughw:0,0";
+	snd_pcm_sframes_t frames;
+  	int32_t audio_buffer[1024]; //has to be int32_t type as that is required for the buffer of PCM frames in ALSA. So its a array with 1024 spaces for 32 bit ints
 
 	if (snd_pcm_open(&pcm_handle, pcm_name, stream, 0) < 0) {
       		fprintf(stderr, "Cannot connect to audio device %s\n", pcm_name);
@@ -52,9 +54,13 @@ int main(void){
 	}
   
 
-	//record audio
-	snd_pcm_readi();	
-	
+	//record PCM sounddata to a buffer called frames
+    frames = snd_pcm_readi(pcm_handle, audio_buffer, 1024);
+	if (frames < 0) {
+    fprintf(stderr, "Audio read failed: %s\n", snd_strerror((int)frames));
+    return 1;
+	}
+
 
 	//stop audio device efter 
 	snd_pcm_drop(pcm_handle);	
