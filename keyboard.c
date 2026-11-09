@@ -68,3 +68,63 @@ static void format_time(const struct input_event *ev, char *out, size_t size){
 }
 
 
+int keyboard_open(cont char *device){
+
+    //model skal måske ændre kan ikke huskes jonas tastatur
+    struct xkb_rule_names names =
+    {
+        { .rules = "evdev", .model = "pc105", .layout = "dk" };
+    };
+    
+    fd = open(device, O_RDONLY | O_NONBLOCK);
+
+    if (fd < 0) {
+        perror("Kunne ikke åbne tastatur-enheden");
+        return -1;
+    }
+
+    // henter kontekst fra bibloteket
+    ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    keymap = ctx ? xkb_keymap_new_from_names(ctx, &names, XKB_KEYMAP_COMPILE_NO_FLAGS) : NULL;
+    state = keymap ? xkb_state_new(keymap) : NULL; 
+
+    if (!state) {
+        fprintf(stderr, "fejl i indlæsning af libxkbcommon\n");
+        keyboard_close();
+        return -1;
+    }
+
+    return 0;
+
+}
+
+int keyboard_fd(void) { return fd; }
+
+
+int keyboard_process(key_callback cb){
+
+    struct input_event ev;
+    ssize_t n;
+    
+    while ()
+    {
+        
+    }
+    
+
+}
+
+
+void keyboard_close(void){
+
+    if (state) xkb_state_unref(state);
+    
+    if (keymap) xkb_keymap_unref(keymap);
+    
+    if (ctx) xkb_context_unref(ctx);
+    state = NULL; keymap = NULL; ctx = NULL;
+    
+    if (fd >= 0) close(fd);
+        fd = -1;
+
+}
