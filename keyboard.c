@@ -106,13 +106,46 @@ int keyboard_process(key_callback cb){
     struct input_event ev;
     ssize_t n;
     
-    while ()
-    {
-        
+    while (){
+    
+    //filter
+    if (ev.type != EV_KEY || ev.value > 1 || ev.code >= KEY_CNT) continue;
+
+        // xkb har et offset på 8 ift linux    
+        xkb_keycode_t code = ev.code + 8;
+        char *name = down_names[ev.code];
+        char ts[40];
+        int is_down = ev.value == 1;
+
+    
+    if (is_down) {
+        xkb_state_update_key(state, code, XKB_KEY_DOWN);
+        key_name(code, name, sizeof(down_names[0]));
+    //fejl håndtering
+    } else if (!name[0]) {
+        key_name(code, name, sizeof(down_names[0]));
+    }
+
+    format_time(&ev, ts, sizeof(ts));
+        cb(name, is_down ? "key_down" : "key_up", ts);
+
+    if (!is_down) {
+        xkb_state_update_key(state, code, XKB_KEY_UP);
+        name[0] = '\0';
     }
     
+    }
 
+    //fejlhåndtering
+    if (n < 0 && errno != EAGAIN && errno != EINTR) {
+        perror("Tastaturet fejl");
+        return -1;
+    }
+    
+    return 0;
+    
 }
+    
 
 
 void keyboard_close(void){
