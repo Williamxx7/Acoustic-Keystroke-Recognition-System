@@ -9,7 +9,7 @@
 
 static FILE *file = NULL;
 
-//Bestemmer hvordan et objekt skrives til filen
+// bestemmer hvordan et objekt skrives til filen
 static void write_line(cJSON *obj)
 {
     char *s = cJSON_PrintUnformatted(obj);
