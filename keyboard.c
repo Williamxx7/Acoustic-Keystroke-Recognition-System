@@ -11,6 +11,12 @@
 #include <unistd.h>
 
 
+// https://xkbcommon.org/doc/1.14.0/xkbcommon-keysyms_8h.html
+// https://xkbcommon.org/doc/current/md_doc_2quick-guide.html
+// https://sources.debian.org/src/libxkbcommon/1.13.1-1/tools/interactive-evdev.c?pow_referer=
+// https://docs.kernel.org/input/input.html
+// https://android.googlesource.com/platform/external/libxkbcommon/+/91f38399c2ea2fca0a88d624fc72d203df0e108a/xkbcommon/xkbcommon.h
+
 struct keyboard {
     int fd;
     struct xkb_context *ctx;
