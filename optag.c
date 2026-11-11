@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#define GPIO_CHIP_PATH "/dev/gpiochip0"
+#define GPIO_CHIP "/dev/gpiochip0"
 #define BUTTON_GPIO 17
 
 #include <alloca.h>
@@ -7,6 +7,7 @@
 #include <alsa/asoundlib.h>
 #include <sndfile.h>
 #include <stdint.h>
+#include <gpiod.h>
 
 int main(void){
 
@@ -21,10 +22,18 @@ int main(void){
     int32_t audio_buffer[1024]; //has to be int32_t type as that is required for the buffer of PCM frames in ALSA. So its a array with 1024 spaces for 32 bit ints
 
 
+    struct gpiod_chip *chip = gpiod_chip_open(GPIO_CHIP);
+	struct gpiod_line_settings *settings = gpiod_line_settings_new();
+	gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
+	gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_PULL_UP);
+    struct gpiod_line_config *line_config = gpiod_line_config_new();
+    unsigned int offset = BUTTON_GPIO; //laver den her offset, da i linjen nedenunder skal der bruges en unsigned int pointer for parameter 2
+    gpiod_line_config_add_line_settings(line_config,  &offset, 1, settings);
+    struct gpiod_line_request *request = gpiod_chip_request_lines(chip, NULL, line_config);
 
-	settings = gpiod_line_settings_new();
-	gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT)
-	gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_PULL_UP)
+    int value = gpiod_line_request_get_value(request, BUTTON_GPIO);
+
+    printf("%d", value);
 
 	if (snd_pcm_open(&pcm_handle, pcm_name, stream, 0) < 0) {
             fprintf(stderr, "Cannot connect to audio device %s\n", pcm_name);
@@ -72,7 +81,7 @@ int main(void){
 
 	SF_INFO info = { .samplerate = 48000, .channels = 1, .format = SF_FORMAT_WAV | SF_FORMAT_PCM_32 };
 
-    SNDFILE *wavFile = sf_open("typeRecording.wav", SFM_WRITE, &info);
+    SNDFILE *wavFile = sf_open("audio.wav", SFM_WRITE, &info);
     if (wavFile == NULL) {
             fprintf(stderr, "Could not open WAV file: %s\n", sf_strerror(wavFile));
             return(-1);
