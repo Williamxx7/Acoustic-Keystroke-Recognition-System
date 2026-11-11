@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
 #include "storage.h"
 #include <cjson/cJSON.h>
 #include <stdio.h>
