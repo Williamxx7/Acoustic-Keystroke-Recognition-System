@@ -8,10 +8,10 @@
 #include <string.h>
 #include <time.h>
 
-https://github.com/iamscottmoyers/simple-libwebsockets-example
-https://gist.github.com/zYeoman/8dffbb612d10c3a11912cb26027f4236
-https://github.com/iamscottmoyers/simple-libwebsockets-example/blob/master/client.c
-https://android.googlesource.com/platform/external/libwebsockets/+/33a60348/minimal-examples/raw/minimal-raw-netcat/minimal-raw-netcat.c
+//https://github.com/iamscottmoyers/simple-libwebsockets-example
+//https://gist.github.com/zYeoman/8dffbb612d10c3a11912cb26027f4236
+//https://github.com/iamscottmoyers/simple-libwebsockets-example/blob/master/client.c
+//https://android.googlesource.com/platform/external/libwebsockets/+/33a60348/minimal-examples/raw/minimal-raw-netcat/minimal-raw-netcat.c
 
 #define HTTP_PORT 6767
 #define MAX_IN 4096
@@ -48,15 +48,15 @@ static void timestamp(char *out, size_t size){
 
 static void queue_json(cJSON *json){
     char *o = cJSON_PrintUnformatted(json);
-    unsigned next = next = (queue_write + 1) % QUEUE_SIZE;
+    unsigned next = (queue_write + 1) % QUEUE_SIZE;
     
     //Tjekker om alt er i orden inden json sendes til browser
     if (o && browser && next != queue_read && strlen(o) < QUEUE_MSG) {
-        strcpy(queue[queue_write], s);
+        strcpy(queue[queue_write], o);
         queue_write = next;
         lws_callback_on_writable(browser);
     }
-    free(s);
+    free(o);
 }
 
 //kommunikation til browser om recordings 
@@ -100,7 +100,7 @@ static const char *get_string(const cJSON *message, const char *name, const char
 }
 
 // tal fra json
-static int get_int(const cJSON *message, const char *name, const char *fallback){
+static int get_int(const cJSON *message, const char *name){
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(message, name);
     return cJSON_IsNumber(item) ? item->valueint : 0;
 }
@@ -108,7 +108,7 @@ static int get_int(const cJSON *message, const char *name, const char *fallback)
 // komunikation med broswer til at håndtere stop, start, fejl osv
 static void browser_message(const char *data, size_t length){
 
-    cJSON *message = cJSON_ParseWithLenght(data, length);
+    cJSON *message = cJSON_ParseWithLength(data, length);
 
     if(!message) return;
 
@@ -118,12 +118,12 @@ static void browser_message(const char *data, size_t length){
     timestamp(ts, sizeof(ts));
 
    if (strcmp(type, "start") == 0 && !recording) {
-        snprintf(participant, sizeof(participant), "%s", get_string(msg, "participant", "Unknown"));
+        snprintf(participant, sizeof(participant), "%s", get_string(message, "participant", "Unknown"));
         snprintf(session_id, sizeof(session_id), "%.4s%.2s%.2s_%.2s%.2s%.2s",ts, ts + 5, ts + 8, ts + 11, ts + 14, ts + 17);
         
         if (storage_start(participant, session_id, ts) == 0) {
             recording = 1;
-            storage_add_text(get_int(msg, "text_id"), get_string(msg, "text", ""), ts);
+            storage_add_text(get_int(message, "text_id"), get_string(message, "text", ""), ts);
         
         } else {
             send_error("fejl i oprettlse af fil");
@@ -134,9 +134,9 @@ static void browser_message(const char *data, size_t length){
         send_state();
     
     } else if (strcmp(type, "text") == 0 && recording) {
-        storage_add_text(get_int(msg, "text_id"), get_string(msg, "text", ""), ts);
+        storage_add_text(get_int(message, "text_id"), get_string(message, "text", ""), ts);
     }
-    cJSON_Delete(msg);
+    cJSON_Delete(message);
 }
     
 
@@ -174,7 +174,7 @@ static int callback_http_ws(struct lws *wsi, enum lws_callback_reasons reason, v
         case LWS_CALLBACK_HTTP:{
             const char *uri = in;
             if (uri && (strcmp(uri, "/") == 0 || strcmp(uri, "/index.html") == 0))
-                return lws_serve_http_file(wsi, "index.html", "text/html; charset=utf-8", NULL, 0) ? -1 : 0;
+                return lws_serve_http_file(wsi, "index.html", "text/html; charset=utf-8", NULL, 0) < 0 ? -1 : 0;
             
             lws_return_http_status(wsi, HTTP_STATUS_NOT_FOUND, "Not found");
             return -1;
@@ -189,16 +189,16 @@ static int callback_http_ws(struct lws *wsi, enum lws_callback_reasons reason, v
             return 0;
         
         //modtager
-        case LWS_CALLBACK_RECIVE:
-            if(len + psd->input_len >= sizeof(psd->input_len))
+        case LWS_CALLBACK_RECEIVE:
+            if (len + psd->input_len >= sizeof(psd->input))
                 return -1;
             
             memcpy(psd->input + psd->input_len, in, len);
-            psd->input_len += len
+            psd->input_len += len;
 
             if (lws_is_final_fragment(wsi) && lws_remaining_packet_payload(wsi) == 0) {
-                if (!lws_frame_is_binary(wsi)) handle_browser_message(pss->input, pss->input_len);
-                pss->input_len = 0;
+                if (!lws_frame_is_binary(wsi)) browser_message(psd->input, psd->input_len);
+                psd->input_len = 0;
             }
             return 0;
         
@@ -233,8 +233,9 @@ static int callback_http_ws(struct lws *wsi, enum lws_callback_reasons reason, v
     default:
         return 0;
 
-}
 
+    }
+}
 
 int main(int argc, char **argv){
 
@@ -288,8 +289,8 @@ int main(int argc, char **argv){
     signal(SIGTERM, stop_handler);
     printf("Kører på http://<RASPBERRY_PI_IP>:%d (tastatur: %s, dansk layout)\n", HTTP_PORT, argv[1]);
 
-    //løkke for program
-    while (running && lws_service(context, 0) >= 0) {}
+    //løkke for program b
+    while (running && lws_service(context, 50) >= 0) {}
 
     stop_recording();
     lws_context_destroy(context);
