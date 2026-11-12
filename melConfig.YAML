@@ -1,0 +1,7 @@
+# Config til meltransformer
+
+sample_rate: 44100   # Hz - skal matche optagelsens sample rate
+target: 8820         # længden af en lydbid i samples (0,2 sek. ved 44100 Hz)
+n_fft: 1024          # FFT-vinduets størrelse (samples)
+hop_length: 256      # skridt mellem FFT-vinduer (samples)
+n_mels: 64           # antal mel-bånd = højden på spektrogrammet
