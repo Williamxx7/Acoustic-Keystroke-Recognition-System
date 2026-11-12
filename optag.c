@@ -21,19 +21,32 @@ int main(void){
     snd_pcm_sframes_t frames_read;
     int32_t audio_buffer[1024]; //has to be int32_t type as that is required for the buffer of PCM frames in ALSA. So its a array with 1024 spaces for 32 bit ints
 
-
+    int stable_reading = 0;
     struct gpiod_chip *chip = gpiod_chip_open(GPIO_CHIP);
 	struct gpiod_line_settings *settings = gpiod_line_settings_new();
 	gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
-	gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_PULL_UP);
+	gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_PULL_DOWN);
     struct gpiod_line_config *line_config = gpiod_line_config_new();
     unsigned int offset = BUTTON_GPIO; //laver den her offset, da i linjen nedenunder skal der bruges en unsigned int pointer for parameter 2
     gpiod_line_config_add_line_settings(line_config,  &offset, 1, settings);
     struct gpiod_line_request *request = gpiod_chip_request_lines(chip, NULL, line_config);
 
-    int value = gpiod_line_request_get_value(request, BUTTON_GPIO);
 
-    printf("%d", value);
+    //time declartion of variables:
+    struct timespec second, nanosecond;
+    second.tv_sec = 0;
+    nanosecond.tv_nsec = 50000000L; //has to be have long type
+    while(stable_reading < 1) { //loop for start af recording, kører uendelig indtil man trykker
+        int value1 = gpiod_line_request_get_value(request, BUTTON_GPIO);
+        printf("starting loop: reading1: %d", value1);
+        nanosleep(&second, &nanosecond);
+        int value2 = gpiod_line_request_get_value(request, BUTTON_GPIO);
+        printf("reading2: %d", value2);
+        if(value1 == value2){
+            stable_reading = 1;
+        }
+    }
+    stable_reading = 0;
 
 	if (snd_pcm_open(&pcm_handle, pcm_name, stream, 0) < 0) {
             fprintf(stderr, "Cannot connect to audio device %s\n", pcm_name);
@@ -76,33 +89,46 @@ int main(void){
         return(-1);
     }
 
-
-        //record PCM sounddata to a buffer called frames
-
 	SF_INFO info = { .samplerate = 48000, .channels = 1, .format = SF_FORMAT_WAV | SF_FORMAT_PCM_32 };
-
     SNDFILE *wavFile = sf_open("audio.wav", SFM_WRITE, &info);
-    if (wavFile == NULL) {
-            fprintf(stderr, "Could not open WAV file: %s\n", sf_strerror(wavFile));
+        if (wavFile == NULL) {
+                fprintf(stderr, "Could not open WAV file: %s\n", sf_strerror(wavFile));
+                return(-1);
+        }
+
+    while(stable_reading < 2) {
+        snd_pcm_prepare(pcm_handle);
+        int error = snd_pcm_prepare(pcm_handle);
+        if (error < 0){
+            printf("Can't do recovery, prepare failed: %s\n", snd_strerror(error));
             return(-1);
-    }
+        }
 
-    frames_read = snd_pcm_readi(pcm_handle, audio_buffer, 1024);
-    if (frames_read < 0) {
-    	fprintf(stderr, "Audio read failed: %s\n", snd_strerror(frames_read));
-    	return(-1);
-    }
+        frames_read = snd_pcm_readi(pcm_handle, audio_buffer, 1024);
+        if (frames_read < 0) {
+            fprintf(stderr, "Audio read failed: %s\n", snd_strerror(frames_read));
+            return(-1);
+        }
 
-    sf_count_t frames_written = sf_writef_int(wavFile, (int*)audio_buffer, frames_read);
-    if (frames_written != frames_read) {
-        fprintf(stderr, "Could not read all frames: %s\n", sf_strerror(wavFile));
-    }
+        sf_count_t frames_written = sf_writef_int(wavFile, (int*)audio_buffer, frames_read);
+        if (frames_written != frames_read) {
+            fprintf(stderr, "Could not read frames: %s\n", sf_strerror(wavFile));
+        }
 
+
+        int value1 = gpiod_line_request_get_value(request, BUTTON_GPIO);
+        printf("recording loop: reading1: %d", value1)
+        nanosleep(&second, &nanosecond); //50ms
+        int value2 = gpiod_line_request_get_value(request, BUTTON_GPIO);
+        printf("reading2: %d", value2)
+        if(value1 == 1 && value2 == 1){
+            stable_reading = 2;
+        }
+    }
 
     if(sf_close(wavFile) != 0){
-        fprintf(stderr, "Could not close WAV file: %s\n", sf_strerror(wavFile));
+            fprintf(stderr, "Could not close WAV file: %s\n", sf_strerror(wavFile));
     }
-
-    //stop audio device efter
-    snd_pcm_drop(pcm_handle);
 }
+
+
