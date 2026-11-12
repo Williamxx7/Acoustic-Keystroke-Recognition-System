@@ -40,7 +40,7 @@ static void key_name(xkb_keycode_t code, char *out, size_t size){
             return;
         case XKB_KEY_BackSpace: snprintf(out, size, "Backspace"); 
             return;
-        case XKB_KEY_space: snprintf(out, size, "Space");
+        case XKB_KEY_space: snprintf(out, size, " ");
             return;
         case XKB_KEY_Tab: snprintf(out, size, "Tab");
             return;

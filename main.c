@@ -17,6 +17,7 @@
 #define MAX_IN 4096
 #define QUEUE_SIZE 256
 #define QUEUE_MSG 512
+#define MAX_HELD 16
 
 static int recording = 0;
 static char participant[128] = "";
@@ -36,6 +37,44 @@ static void stop_handler(int sig){
     running = 0;
 }
 
+
+
+static int sample_counter = 0;
+static struct { char key[32]; int id; } held[MAX_HELD];
+
+static void reset_samples(void){
+    sample_counter = 0;
+    memset(held, 0, sizeof(held));
+}
+
+static int sample_for(const char *key, const char *event){
+    if (strcmp(event, "key_down") == 0) {
+        // tasten er allerede nede, samme id
+        for (int i = 0; i < MAX_HELD; i++)
+            if (held[i].id && strcmp(held[i].key, key) == 0) return held[i].id;
+
+        for (int i = 0; i < MAX_HELD; i++) {
+            if (!held[i].id) {
+                snprintf(held[i].key, sizeof(held[i].key), "%s", key);
+                held[i].id = ++sample_counter;
+                return held[i].id;
+            }
+        }
+        return 0;
+    }
+
+    if (strcmp(event, "key_up") == 0) {
+        for (int i = 0; i < MAX_HELD; i++) {
+            if (held[i].id && strcmp(held[i].key, key) == 0) {
+                int id = held[i].id;
+                held[i].id = 0;
+                return id;
+            }
+        }
+    }
+    return 0;
+}
+
 static void timestamp(char *out, size_t size){
     struct timespec ts;
     struct tm t;
@@ -44,6 +83,12 @@ static void timestamp(char *out, size_t size){
     gmtime_r(&ts.tv_sec, &t);
     strftime(base, sizeof(base), "%Y-%m-%dT%H:%M:%S", &t);
     snprintf(out, size, "%s.%03dZ", base, (int)(ts.tv_nsec / 1000000) % 1000);
+}
+
+static void timestamp_file_creation(char *out, size_t size){
+    struct timespec ts_f = {0};
+    clock_gettime(CLOCK_REALTIME, &ts_f);
+    snprintf(out, size, "%lld", (long long)ts_f.tv_sec);
 }
 
 static void queue_json(cJSON *json){
@@ -90,6 +135,7 @@ static void send_error(const char *message){
 
 static void stop_recording(void){
     recording = 0;
+    reset_samples();
     storage_stop();
 }
 
@@ -119,7 +165,7 @@ static void browser_message(const char *data, size_t length){
 
    if (strcmp(type, "start") == 0 && !recording) {
         snprintf(participant, sizeof(participant), "%s", get_string(message, "participant", "Unknown"));
-        snprintf(session_id, sizeof(session_id), "%.4s%.2s%.2s_%.2s%.2s%.2s",ts, ts + 5, ts + 8, ts + 11, ts + 14, ts + 17);
+        timestamp_file_creation(session_id, sizeof(session_id));
         
         if (storage_start(participant, session_id, ts) == 0) {
             recording = 1;
@@ -143,19 +189,26 @@ static void browser_message(const char *data, size_t length){
 
 
 //skal kunne kaldes fra keyboard.c for keypress
-static void on_key(const char *key, const char *event, const char *timestamp){
+static void on_key(const char *key, const char *event, const char *ts){
 
     if (!recording) return;
-    storage_add_key_event(key, event, timestamp);
+
+    int id = sample_for(key, event);
+    if (id == 0) return;
+
+    char sample_id[8];
+    snprintf(sample_id, sizeof(sample_id), "%03d", id);
+
+    storage_add_key_event(sample_id, key, event, ts);
 
     cJSON *m = cJSON_CreateObject();
     cJSON_AddStringToObject(m, "type", "key");
+    cJSON_AddStringToObject(m, "sample_id", sample_id);
     cJSON_AddStringToObject(m, "key", key);
     cJSON_AddStringToObject(m, "event", event);
-    cJSON_AddStringToObject(m, "timestamp", timestamp);
+    cJSON_AddStringToObject(m, "timestamp", ts);
     queue_json(m);
     cJSON_Delete(m);
-
 }
 
 static int callback_http_ws(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len){
