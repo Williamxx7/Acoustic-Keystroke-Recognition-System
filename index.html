@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Training Manager</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        #bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+        #status { font-weight: bold; }
+        #target {
+            font-family: monospace; font-size: 20px; line-height: 1.8; white-space: pre-wrap;
+            background: #2f2f2f; color: #888; padding: 16px; border-radius: 6px;
+            max-width: 700px; margin-bottom: 12px;
+        }
+        .ok { color: #ddd; }
+        .bad { color: #ff6b6b; text-decoration: underline; }
+        .cur { border-bottom: 2px solid #fff; }
+    </style>
+</head>
+<body>
+    <div id="bar">
+        <label>
+            Personer:
+            <select id="person">
+                <option>William</option>
+                <option>Emil</option>
+                <option>Simon</option>
+                <option>Jonas</option>
+                <option>Gæst1</option>
+            </select>
+        </label>
+        <button id="start" disabled>Start optagelse</button>
+        <button id="stop" disabled>Stop optagelse</button>
+    </div>
+
+    <p id="status">Forbinder til server...</p>
+    <p>Skriv teksten på tastaturet (<b>·</b> er mellemrum, <b>↵</b> er enter):</p>
+    <div id="target"></div>
+    <button id="new" disabled>Ny tekst</button>
+
+    <script>
+        const GROUPS = 25;
+        const MIN_LEN = 2;
+        const MAX_LEN = 12;
+        const DIGIT_CHANCE = 0.15;
+        const ENTER_CHANCE = 0.2;
+        const LETTERS = "abcdefghijklmnopqrstuvwxyzæøå";
+        const DIGITS = "0123456789";
+
+        let target = "";
+        let typed = "";
+        let textId = 0;
+        let advancing = false;
+        let ws = null;
+
+        let state = {
+            recording: false,
+            processing: false,
+            session_id: null,
+            participant: null
+        };
+
+        const targetEl = document.getElementById("target");
+        const personEl = document.getElementById("person");
+        const startBtn = document.getElementById("start");
+        const stopBtn = document.getElementById("stop");
+        const newBtn = document.getElementById("new");
+        const statusEl = document.getElementById("status");
+
+        function send(data) {
+            if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
+        }
+
+        function randInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function randChar() {
+            const pool = Math.random() < DIGIT_CHANCE ? DIGITS : LETTERS;
+            return pool[randInt(0, pool.length - 1)];
+        }
+
+        function generateText() {
+            let text = "";
+            for (let g = 0; g < GROUPS; g++) {
+                const len = randInt(MIN_LEN, MAX_LEN);
+                for (let i = 0; i < len; i++) text += randChar();
+                if (g < GROUPS - 1) text += Math.random() < ENTER_CHANCE ? "\n" : " ";
+            }
+            return text;
+        }
+
+        function render() {
+            let html = "";
+            for (let i = 0; i < target.length; i++) {
+                const c = target[i];
+                const shown = c === " " ? "·" : c === "\n" ? "↵\n" : c;
+                let cls = "";
+                if (i < typed.length) cls = typed[i] === c ? "ok" : "bad";
+                else if (i === typed.length) cls = "cur";
+                html += `<span class="${cls}">${shown}</span>`;
+                if (c === " ") html += "<wbr>";
+            }
+            targetEl.innerHTML = html;
+        }
+
+        function newText() {
+            if (!state.recording) return;
+            target = generateText();
+            typed = "";
+            advancing = false;
+            textId++;
+            render();
+            send({ type: "text", text_id: textId, text: target });
+        }
+
+        function applyKey(key) {
+            if (key === "Backspace") {
+                typed = typed.slice(0, -1);
+            } else if (key === "Enter") {
+                if (typed.length < target.length) typed += "\n";
+            } else if (key.length === 1) {
+                if (typed.length < target.length) typed += key;
+            }
+            render();
+            if (typed.length >= target.length && !advancing) {
+                advancing = true;
+                setTimeout(newText, 400);
+            }
+        }
+
+        function updateUi() {
+            const connected = ws?.readyState === WebSocket.OPEN;
+            startBtn.disabled = !connected || state.recording || state.processing;
+            stopBtn.disabled = !connected || !state.recording;
+            newBtn.disabled = !connected || !state.recording;
+            personEl.disabled = state.recording || state.processing;
+
+            if (!connected) statusEl.textContent = "Ikke forbundet til server";
+            else if (state.processing) statusEl.textContent = "Behandler lyd";
+            else if (state.recording) statusEl.textContent = "Optager: " + state.session_id + " (" + state.participant + ")";
+            else statusEl.textContent = "Forbundet. Klar til optagelse";
+        }
+
+        function connect() {
+            if (ws && ws.readyState <= WebSocket.OPEN) return;
+            const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+            ws = new WebSocket(protocol + "//" + location.host + "/");
+
+            ws.onopen = () => {
+                send({ type: "hello" });
+                updateUi();
+            };
+
+            ws.onmessage = (event) => {
+                let msg;
+                try { msg = JSON.parse(event.data); }
+                catch (error) { console.error("Ugyldig besked fra server:", event.data); return; }
+
+                if (msg.type === "state") {
+                    state = msg;
+                    updateUi();
+                } else if (msg.type === "key" && state.recording) {
+                    // Begge events videresendes og gemmes. Kun key_down ændrer den viste tekst.
+                    if (msg.event === "key_down") applyKey(msg.key);
+                } else if (msg.type === "done") {
+                    state.recording = false;
+                    state.processing = false;
+                    updateUi();
+                    statusEl.textContent = "Færdig. Resultater gemt på Pi.";
+                } else if (msg.type === "error") {
+                    statusEl.textContent = "Fejl: " + msg.message;
+                }
+            };
+
+            ws.onclose = () => {
+                ws = null;
+                updateUi();
+                statusEl.textContent = "Forbindelse mistet";
+                setTimeout(connect, 2000);
+            };
+            ws.onerror = () => { statusEl.textContent = "Fejl ved forbindelse til server"; };
+        }
+
+        startBtn.addEventListener("click", () => {
+            target = generateText();
+            typed = "";
+            advancing = false;
+            textId++;
+            render();
+            send({ type: "start", participant: personEl.value, text_id: textId, text: target });
+        });
+
+        stopBtn.addEventListener("click", () => send({ type: "stop", session_id: state.session_id }));
+        newBtn.addEventListener("click", newText);
+
+        target = generateText();
+        render();
+        updateUi();
+        connect();
+    </script>
+</body>
+</html>
