@@ -132,7 +132,6 @@ static void send_error(const char *message){
 }
 
 
-
 static void stop_recording(void){
     recording = 0;
     reset_samples();
