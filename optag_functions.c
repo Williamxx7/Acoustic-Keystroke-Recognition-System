@@ -30,7 +30,7 @@ int main(void){
     gpiod_line_config_add_line_settings(line_config, &offset, 1, settings);
     struct gpiod_line_request *request = gpiod_chip_request_lines(chip, NULL, line_config);
 
-    //declartion of time variables
+    //time declartion of variables:
     struct timespec delay = { .tv_sec = 0, .tv_nsec = 50000000L };
 
     printf("Ready for recording. Press button to record\n");
@@ -119,6 +119,7 @@ int main(void){
     printf("Recording audio now. Press to stop\n");
 
     while (1) { //forever loop
+        /* Vent højst 20 ms på data, så knappen altid bliver tjekket */
         int ready = snd_pcm_wait(pcm_handle, 20);
         if (ready > 0) {
             frames_read = snd_pcm_readi(pcm_handle, audio_buffer, 1024);
@@ -139,11 +140,12 @@ int main(void){
         int current_reading = gpiod_line_request_get_value(request, BUTTON_GPIO);
 
         if (current_reading != last_reading) {
-            printf("button changed to %d\n", current_reading);
+            printf("knap skiftede til %d\n", current_reading);
+            fflush(stdout);
         }
 
         if (last_reading == 1 && current_reading == 0) { //if new press is here then stop.
-            nanosleep(&delay, NULL); 
+            nanosleep(&delay, NULL); /* debounce */
             break;
         }
         last_reading = current_reading;
