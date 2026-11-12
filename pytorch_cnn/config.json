@@ -1,0 +1,17 @@
+{
+  "epochs": 30,
+  "batch_size": 32,
+  "learning_rate": 0.001,
+  "seed": 42,
+  "validation_fraction": 0.2,
+  "spectrogram": {
+    "sample_rate_hz": null,
+    "n_fft": null,
+    "hop_length": null,
+    "n_mels": null,
+    "f_min_hz": null,
+    "f_max_hz": null,
+    "log_scale": null,
+    "normalization": null
+  }
+}
