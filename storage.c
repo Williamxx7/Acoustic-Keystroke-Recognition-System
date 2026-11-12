@@ -25,7 +25,7 @@ int storage_start(const char *participant, const char *session_id, const char *t
     char path[128];
     storage_stop();
     mkdir("recordings", 0755);
-    snprintf(path, sizeof(path), "recordings/session_%s.jsonl", session_id);
+    snprintf(path, sizeof(path), "recordings/session_%s/config.jsonl", session_id);
     file = fopen(path, "w");
     if (!file) {
         perror("Kunne ikke oprette fil");
