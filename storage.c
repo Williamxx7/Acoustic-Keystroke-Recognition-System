@@ -21,8 +21,7 @@ static void write_line(cJSON *obj)
     cJSON_Delete(obj);
 }
 
-int storage_start(const char *participant, const char *session_id, const char *timestamp)
-{
+int storage_start(const char *participant, const char *session_id, const char *timestamp){
     char path[128];
     storage_stop();
     mkdir("recordings", 0755);
@@ -42,11 +41,12 @@ int storage_start(const char *participant, const char *session_id, const char *t
     return 0;
 }
 
-void storage_add_key_event(const char *key, const char *event, const char *timestamp)
+void storage_add_key_event(const char *sample_id, const char *key, const char *event, const char *timestamp)
 {
     if (!file) return;
     cJSON *o = cJSON_CreateObject();
     cJSON_AddStringToObject(o, "type", "key");
+    cJSON_AddStringToObject(o, "sample_id", sample_id);
     cJSON_AddStringToObject(o, "key", key);
     cJSON_AddStringToObject(o, "event", event);
     cJSON_AddStringToObject(o, "timestamp", timestamp);
