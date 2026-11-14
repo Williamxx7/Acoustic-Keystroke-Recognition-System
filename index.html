@@ -51,7 +51,7 @@
         let target = "";
         let typed = "";
         let textId = 0;
-        let advancing = false;
+        let isAdvancing = false;
         let ws = null;
 
         let state = {
@@ -109,7 +109,7 @@
             if (!state.recording) return;
             target = generateText();
             typed = "";
-            advancing = false;
+            isAdvancing = false;
             textId++;
             render();
             send({ type: "text", text_id: textId, text: target });
@@ -124,8 +124,8 @@
                 if (typed.length < target.length) typed += key;
             }
             render();
-            if (typed.length >= target.length && !advancing) {
-                advancing = true;
+            if (typed.length >= target.length && !isAdvancing) {
+                isAdvancing = true;
                 setTimeout(newText, 400);
             }
         }
@@ -154,23 +154,23 @@
             };
 
             ws.onmessage = (event) => {
-                let msg;
-                try { msg = JSON.parse(event.data); }
+                let message;
+                try { message = JSON.parse(event.data); }
                 catch (error) { console.error("Ugyldig besked fra server:", event.data); return; }
 
-                if (msg.type === "state") {
-                    state = msg;
+                if (message.type === "state") {
+                    state = message;
                     updateUi();
-                } else if (msg.type === "key" && state.recording) {
+                } else if (message.type === "key" && state.recording) {
                     // Begge events videresendes og gemmes. Kun key_down ændrer den viste tekst.
-                    if (msg.event === "key_down") applyKey(msg.key);
-                } else if (msg.type === "done") {
+                    if (message.event === "key_down") applyKey(message.key);
+                } else if (message.type === "done") {
                     state.recording = false;
                     state.processing = false;
                     updateUi();
                     statusEl.textContent = "Færdig. Resultater gemt på Pi.";
-                } else if (msg.type === "error") {
-                    statusEl.textContent = "Fejl: " + msg.message;
+                } else if (message.type === "error") {
+                    statusEl.textContent = "Fejl: " + message.message;
                 }
             };
 
@@ -186,7 +186,7 @@
         startBtn.addEventListener("click", () => {
             target = generateText();
             typed = "";
-            advancing = false;
+            isAdvancing = false;
             textId++;
             render();
             send({ type: "start", participant: personEl.value, text_id: textId, text: target });

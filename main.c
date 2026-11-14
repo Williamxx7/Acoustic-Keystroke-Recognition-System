@@ -26,7 +26,7 @@ static char session_id[64] = "";
 static char queue[QUEUE_SIZE][QUEUE_MSG];
 static unsigned queue_read = 0, queue_write = 0;
 //websocket instans
-static struct lws *browser = NULL;
+static struct lws *browser_wsi = NULL;
 //håndtere og programmet skal kører. 
 //sig_atomic_t er bestemt type der sørger for læsning og skrivning sker i en process
 static volatile sig_atomic_t running = 1;
@@ -96,10 +96,10 @@ static void queue_json(cJSON *json){
     unsigned next = (queue_write + 1) % QUEUE_SIZE;
     
     //Tjekker om alt er i orden inden json sendes til browser
-    if (o && browser && next != queue_read && strlen(o) < QUEUE_MSG) {
+    if (o && browser_wsi && next != queue_read && strlen(o) < QUEUE_MSG) {
         strcpy(queue[queue_write], o);
         queue_write = next;
-        lws_callback_on_writable(browser);
+        lws_callback_on_writable(browser_wsi);
     }
     free(o);
 }
@@ -107,30 +107,28 @@ static void queue_json(cJSON *json){
 //kommunikation til browser om recordings 
 static void send_state(void){
 
-    cJSON *m = cJSON_CreateObject();
-    cJSON_AddStringToObject(m, "type", "state");
-    cJSON_AddBoolToObject(m, "recording", recording);
+    cJSON *message = cJSON_CreateObject();
+    cJSON_AddStringToObject(message, "type", "state");
+    cJSON_AddBoolToObject(message, "recording", recording);
     if (recording) {
-        cJSON_AddStringToObject(m, "session_id", session_id);
-        cJSON_AddStringToObject(m, "participant", participant);
+        cJSON_AddStringToObject(message, "session_id", session_id);
+        cJSON_AddStringToObject(message, "participant", participant);
     } else {
-        cJSON_AddNullToObject(m, "session_id");
-        cJSON_AddNullToObject(m, "participant");
+        cJSON_AddNullToObject(message, "session_id");
+        cJSON_AddNullToObject(message, "participant");
     }
-    queue_json(m);
-    cJSON_Delete(m);
+    queue_json(message);
+    cJSON_Delete(message);
 
 }
-
 
 static void send_error(const char *message){
-    cJSON *m = cJSON_CreateObject();
-    cJSON_AddStringToObject(m, "type", "error");
-    cJSON_AddStringToObject(m, "message", message);
-    queue_json(m);
-    cJSON_Delete(m);
+    cJSON *msg = cJSON_CreateObject();
+    cJSON_AddStringToObject(msg, "type", "error");
+    cJSON_AddStringToObject(msg, "message", message);
+    queue_json(msg);
+    cJSON_Delete(msg);
 }
-
 
 static void stop_recording(void){
     recording = 0;
@@ -200,14 +198,14 @@ static void on_key(const char *key, const char *event, const char *ts){
 
     storage_add_key_event(sample_id, key, event, ts);
 
-    cJSON *m = cJSON_CreateObject();
-    cJSON_AddStringToObject(m, "type", "key");
-    cJSON_AddStringToObject(m, "sample_id", sample_id);
-    cJSON_AddStringToObject(m, "key", key);
-    cJSON_AddStringToObject(m, "event", event);
-    cJSON_AddStringToObject(m, "timestamp", ts);
-    queue_json(m);
-    cJSON_Delete(m);
+    cJSON *message = cJSON_CreateObject();
+    cJSON_AddStringToObject(message, "type", "key");
+    cJSON_AddStringToObject(message, "sample_id", sample_id);
+    cJSON_AddStringToObject(message, "key", key);
+    cJSON_AddStringToObject(message, "event", event);
+    cJSON_AddStringToObject(message, "timestamp", ts);
+    queue_json(message);
+    cJSON_Delete(message);
 }
 
 static int callback_http_ws(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len){
@@ -234,7 +232,7 @@ static int callback_http_ws(struct lws *wsi, enum lws_callback_reasons reason, v
     
         //opretter forbindelse
         case LWS_CALLBACK_ESTABLISHED:
-            browser = wsi;
+            browser_wsi = wsi;
             psd->input_len = 0;
             queue_read = queue_write;
             send_state();
@@ -275,8 +273,8 @@ static int callback_http_ws(struct lws *wsi, enum lws_callback_reasons reason, v
             return 0;
 
         case LWS_CALLBACK_CLOSED:
-            if (browser == wsi) {
-                browser = NULL;
+            if (browser_wsi == wsi) {
+                browser_wsi = NULL;
                 stop_recording();
         }
         queue_read = queue_write;

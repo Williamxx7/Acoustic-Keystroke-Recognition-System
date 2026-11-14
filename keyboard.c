@@ -21,17 +21,17 @@ struct keyboard {
     struct xkb_context *ctx;
     struct xkb_keymap *keymap;
     struct xkb_state *state;
-    char down_names[KEY_CNT][32];
+    char pressed_key_names[KEY_CNT][32];
 };
 
 static struct keyboard kbd = { .fd = -1 };
 
 //keycode til navn 
-static void key_name(xkb_keycode_t code, char *out, size_t size){
+static void key_name(xkb_keycode_t xkb_code, char *out, size_t size){
    
     // https://android.googlesource.com/platform/external/libxkbcommon/+/91f38399c2ea2fca0a88d624fc72d203df0e108a/xkbcommon/xkbcommon.h
     // 1538
-    xkb_keysym_t sym = xkb_state_key_get_one_sym(kbd.state, code);
+    xkb_keysym_t sym = xkb_state_key_get_one_sym(kbd.state, xkb_code);
     
     // fast navn til taster i switch
     switch (sym){
@@ -48,12 +48,12 @@ static void key_name(xkb_keycode_t code, char *out, size_t size){
             return;
         }
     // bruges til alle tegn 
-    if (xkb_state_key_get_utf8(kbd.state, code, out, size) > 0) 
+    if (xkb_state_key_get_utf8(kbd.state, xkb_code, out, size) > 0) 
         return;
     
     // bruges til "control" taster. fx shift, ctrl osv
     if (xkb_keysym_get_name(sym, out, size) <= 0)
-        snprintf(out, size, "KEY_%u", (unsigned)(code - 8));
+        snprintf(out, size, "KEY_%u", (unsigned)(xkb_code - 8));
 
 }
 
@@ -109,7 +109,7 @@ int keyboard_open(const char *device){
 int keyboard_fd(void) {return kbd.fd; }
 
 
-int keyboard_process(key_callback cb){
+int keyboard_process(key_callback callback){
 
     struct input_event ev;
     ssize_t n;
@@ -118,28 +118,27 @@ int keyboard_process(key_callback cb){
 
     
     //filter
-    if (ev.type != EV_KEY || ev.value > 1 || ev.code >= KEY_CNT) continue;
-
-        // xkb har et offset på 8 ift linux    
-        xkb_keycode_t code = ev.code + 8;
-        char *name = kbd.down_names[ev.code];
+   if (ev.type != EV_KEY || ev.value > 1 || ev.code >= KEY_CNT) continue;
+        //linux har offset på 8 
+        xkb_keycode_t xkb_code = ev.code + 8;
+        char *name = kbd.pressed_key_names[ev.code];
         char ts[40];
         int is_down = ev.value == 1;
 
     
     if (is_down) {
-        xkb_state_update_key(kbd.state, code, XKB_KEY_DOWN);
-        key_name(code, name, sizeof(kbd.down_names[0]));
+        xkb_state_update_key(kbd.state, xkb_code, XKB_KEY_DOWN);
+        key_name(xkb_code, name, sizeof(kbd.pressed_key_names[0]));
     //fejl håndtering
     } else if (!name[0]) {
-        key_name(code, name, sizeof(kbd.down_names[0]));
+        key_name(xkb_code, name, sizeof(kbd.pressed_key_names[0]));
     }
 
     format_time(&ev, ts, sizeof(ts));
-        cb(name, is_down ? "key_down" : "key_up", ts);
+        callback(name, is_down ? "key_down" : "key_up", ts);
 
     if (!is_down) {
-        xkb_state_update_key(kbd.state, code, XKB_KEY_UP);
+        xkb_state_update_key(kbd.state, xkb_code, XKB_KEY_UP);
         name[0] = '\0';
     }
     
