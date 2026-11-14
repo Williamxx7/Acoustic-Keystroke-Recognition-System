@@ -1,19 +1,18 @@
 #define _POSIX_C_SOURCE 200809L
-#define GPIO_CHIP "/dev/gpiochip0"
-#define BUTTON_GPIO 17
 
 #include <alloca.h>
 #include <stdio.h>
 #include <alsa/asoundlib.h>
 #include <sndfile.h>
 #include <stdint.h>
-#include <gpiod.h>
+
 
 struct audio_recorder {   // Structure declaration
     snd_pcm_t *pcm_handle;
     //audio buffer skal sendes til wav_prepare
     SNDFILE *wavFile;
     struct timespec delay = { .tv_sec = 0, .tv_nsec = 50000000L };
+    int record_decider;
 };
 
 int configure_pcm_settings(struct audio_recorder recorder){
@@ -73,9 +72,7 @@ int configure_pcm_settings(struct audio_recorder recorder){
 }
 
 int start_recording(struct audio_recorder recorder){
-    printf("Recording audio now. Press to stop\n");
-
-    while (1) { //forever loop
+    while (recorder->record_decider != 0) { //forever loop
         int ready = snd_pcm_wait(pcm_handle, 20);
         if (ready > 0) {
             frames_read = snd_pcm_readi(pcm_handle, audio_buffer, 1024);
@@ -95,7 +92,7 @@ int start_recording(struct audio_recorder recorder){
     }
 }
 int stop_recording(struct audio_recorder recorder){
-    
+    recorder->record_decider = 0;
 }
 
 int wav_prepare(struct audio_recorder recorder){
@@ -136,6 +133,6 @@ int cleanup(struct audio_recorder recorder){
 }
 
 int main(void){
+    struct audio_recorder recorder = {0};
 
-    return 0;
 }
