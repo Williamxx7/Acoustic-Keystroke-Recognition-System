@@ -9,8 +9,20 @@
 #include <stdint.h>
 #include <gpiod.h>
 
-int main(void){
+struct audio_recorder {   // Structure declaration
+    snd_pcm_t *pcm_handle;
 
+};
+
+int configure_pcm_settings(struct audio_recorder recorder){}
+int configure_gpio_settings(struct audio_recorder recorder){}
+
+int start_recording(struct audio_recorder recorder){}
+int stop_recording(struct audio_recorder recorder){}
+int pcm_convert_to_wav(struct audio_recorder recorder){}
+
+
+int main(void){
     //PCM recording part
     snd_pcm_t *pcm_handle;
     snd_pcm_stream_t stream = SND_PCM_STREAM_CAPTURE;
