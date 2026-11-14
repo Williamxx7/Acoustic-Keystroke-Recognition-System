@@ -6,16 +6,16 @@
 
 //https://github.com/davegamble/cjson#example
 
-static FILE *file = NULL;
+static FILE *session_file = NULL;
 
 // bestemmer hvordan et objekt skrives til filen
 static void write_line(cJSON *obj)
 {
     char *s = cJSON_PrintUnformatted(obj);
     if (s) {
-        fputs(s, file);
-        fputc('\n', file);
-        fflush(file);
+        fputs(s, session_file);
+        fputc('\n', session_file);
+        fflush(session_file);
         free(s);
     }
     cJSON_Delete(obj);
@@ -25,50 +25,50 @@ int storage_start(const char *participant, const char *session_id, const char *t
     char path[128];
     storage_stop();
     mkdir("recordings", 0755);
-    snprintf(path, sizeof(path), "recordings/session_%s/config.jsonl", session_id);
-    file = fopen(path, "w");
-    if (!file) {
+    snprintf(path, sizeof(path), "recordings/session_%s.jsonl", session_id);
+    session_file = fopen(path, "w");
+    if (!session_file) {
         perror("Kunne ikke oprette fil");
         return -1;
     }
 
-    cJSON *o = cJSON_CreateObject();
-    cJSON_AddStringToObject(o, "type", "session");
-    cJSON_AddStringToObject(o, "participant", participant);
-    cJSON_AddStringToObject(o, "session_id", session_id);
-    cJSON_AddStringToObject(o, "started_at", timestamp);
-    write_line(o);
+    cJSON *record = cJSON_CreateObject();
+    cJSON_AddStringToObject(record, "type", "session");
+    cJSON_AddStringToObject(record, "participant", participant);
+    cJSON_AddStringToObject(record, "session_id", session_id);
+    cJSON_AddStringToObject(record, "started_at", timestamp);
+    write_line(record);
     return 0;
 }
 
 void storage_add_key_event(const char *sample_id, const char *key, const char *event, const char *timestamp)
 {
-    if (!file) return;
-    cJSON *o = cJSON_CreateObject();
-    cJSON_AddStringToObject(o, "type", "key");
-    cJSON_AddStringToObject(o, "sample_id", sample_id);
-    cJSON_AddStringToObject(o, "key", key);
-    cJSON_AddStringToObject(o, "event", event);
-    cJSON_AddStringToObject(o, "timestamp", timestamp);
-    write_line(o);
+    if (!session_file) return;
+    cJSON *record = cJSON_CreateObject();
+    cJSON_AddStringToObject(record, "type", "key");
+    cJSON_AddStringToObject(record, "sample_id", sample_id);
+    cJSON_AddStringToObject(record, "key", key);
+    cJSON_AddStringToObject(record, "event", event);
+    cJSON_AddStringToObject(record, "timestamp", timestamp);
+    write_line(record);
 }
 
 //nok ikke nødvendig, men måske rar at have. 
 void storage_add_text(int text_id, const char *text, const char *timestamp)
 {
-    if (!file) return;
-    cJSON *o = cJSON_CreateObject();
-    cJSON_AddStringToObject(o, "type", "target_text");
-    cJSON_AddNumberToObject(o, "text_id", text_id);
-    cJSON_AddStringToObject(o, "text", text);
-    cJSON_AddStringToObject(o, "timestamp", timestamp);
-    write_line(o);
+    if (!session_file) return;
+    cJSON *record = cJSON_CreateObject();
+    cJSON_AddStringToObject(record, "type", "target_text");
+    cJSON_AddNumberToObject(record, "text_id", text_id);
+    cJSON_AddStringToObject(record, "text", text);
+    cJSON_AddStringToObject(record, "timestamp", timestamp);
+    write_line(record);
 }
 
 void storage_stop(void)
 {
-    if (file) {
-        fclose(file);
-        file = NULL;
+    if (session_file) {
+        fclose(session_file);
+        session_file = NULL;
     }
 }
