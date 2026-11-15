@@ -1,5 +1,6 @@
 #include "keyboard.h"
 #include "storage.h"
+#include "optag.h"
 #include <libwebsockets.h>
 #include <cjson/cJSON.h>
 #include <signal.h>
@@ -32,6 +33,10 @@ static struct lws *browser_wsi = NULL;
 static volatile sig_atomic_t running = 1;
 
 struct per_session_data {char input[MAX_IN]; size_t input_len;};
+
+//til emils kode 
+static struct audio_recorder recorder = {0};
+static char wav_path[160];
 
 static void stop_handler(int sig){
     running = 0;
@@ -133,6 +138,7 @@ static void send_error(const char *message){
 static void stop_recording(void){
     recording = 0;
     reset_samples();
+    stop_record(&recorder);
     storage_stop();
 }
 
@@ -163,11 +169,20 @@ static void browser_message(const char *data, size_t length){
    if (strcmp(type, "start") == 0 && !recording) {
         snprintf(participant, sizeof(participant), "%s", get_string(message, "participant", "Unknown"));
         timestamp_file_creation(session_id, sizeof(session_id));
-        
+                
         if (storage_start(participant, session_id, ts) == 0) {
             recording = 1;
             storage_add_text(get_int(message, "text_id"), get_string(message, "text", ""), ts);
         
+             snprintf(wav_path, sizeof(wav_path), "recordings/session_%s.wav", session_id);
+            //starter mikrofon via emils kode
+            if (configure_wavFile(&recorder, wav_path) != 0) {
+                send_error("kunne ikke oprette wav-fil");
+
+            } else if (start_recording(&recorder) != 0) {
+                send_error("kunne ikke starte lydoptagelse");
+            }
+
         } else {
             send_error("fejl i oprettlse af fil");
         } send_state();
@@ -180,6 +195,8 @@ static void browser_message(const char *data, size_t length){
         storage_add_text(get_int(message, "text_id"), get_string(message, "text", ""), ts);
     }
     cJSON_Delete(message);
+
+
 }
     
 
@@ -339,12 +356,21 @@ int main(int argc, char **argv){
     signal(SIGTERM, stop_handler);
     printf("Kører på http://<RASPBERRY_PI_IP>:%d (tastatur: %s, dansk layout)\n", HTTP_PORT, argv[1]);
 
+    //tjekker om lydkort kan åbnes
+    if (configure_settings(&recorder) != 0) {
+        fprintf(stderr, "kunne ikke åbne lydkort\n");
+        keyboard_close();
+        lws_context_destroy(context);
+    return 1;
+    }
+
     //løkke for program b
     while (running && lws_service(context, 50) >= 0) {}
-
-    stop_recording();
-    lws_context_destroy(context);
-    keyboard_close();
+        stop_recording();
+        lws_context_destroy(context);
+        cleanup(&recorder);
+        keyboard_close();
+        
     return 0;
 
 }

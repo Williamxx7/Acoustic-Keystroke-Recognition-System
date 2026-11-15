@@ -15,9 +15,6 @@ stop_record(&recorder)
 cleanup(&recorder)
 */
 
-
-
-
 struct audio_recorder {
     snd_pcm_t *pcm_handle;
     SNDFILE *wavFile;
@@ -33,9 +30,7 @@ int configure_wavFile(struct audio_recorder *recorder, const char *path);
 
 int start_recording(struct audio_recorder *recorder);
 
-/
 int stop_record(struct audio_recorder *recorder);
-
 
 int cleanup(struct audio_recorder *recorder);
 
