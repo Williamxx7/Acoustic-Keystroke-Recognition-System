@@ -22,24 +22,11 @@ static void write_line(cJSON *obj)
     cJSON_Delete(obj);
 }
 
-int storage_new_session_dir(char *out, size_t size)
+int storage_new_session_dir(char *out, size_t size, const char *session_id)
 {
-    int highest = 0;
-    DIR *d = opendir("recordings");
+    mkdir("recordings", 0755);
 
-    if (!d) {
-        mkdir("recordings", 0755);
-    } else {
-        struct dirent *entry;
-        while ((entry = readdir(d))) {
-            int n;
-            if (sscanf(entry->d_name, "config%d", &n) == 1 && n > highest)
-                highest = n;
-        }
-        closedir(d);
-    }
-
-    snprintf(out, size, "recordings/config%d", highest + 1);
+    snprintf(out, size, "recordings/session_%s", session_id);
     if (mkdir(out, 0755) != 0) {
         perror("Kunne ikke oprette sessionmappe");
         return -1;
@@ -48,9 +35,9 @@ int storage_new_session_dir(char *out, size_t size)
 }
 
 int storage_start(const char *dir, const char *participant, const char *session_id, const char *timestamp){    
-    char path[128];
+    char path[256];
     storage_stop();
-    snprintf(path, sizeof(path), "%s/session_%s.jsonl", dir, session_id);
+    snprintf(path, sizeof(path), "%s/info.jsonl", dir);
     session_file = fopen(path, "w");
     if (!session_file) {
         perror("Kunne ikke oprette fil");
