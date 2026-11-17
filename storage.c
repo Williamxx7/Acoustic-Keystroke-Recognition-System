@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <dirent.h>
 
 //https://github.com/davegamble/cjson#example
 
@@ -21,11 +22,35 @@ static void write_line(cJSON *obj)
     cJSON_Delete(obj);
 }
 
-int storage_start(const char *participant, const char *session_id, const char *timestamp){
+int storage_new_session_dir(char *out, size_t size)
+{
+    int highest = 0;
+    DIR *d = opendir("recordings");
+
+    if (!d) {
+        mkdir("recordings", 0755);
+    } else {
+        struct dirent *entry;
+        while ((entry = readdir(d))) {
+            int n;
+            if (sscanf(entry->d_name, "config%d", &n) == 1 && n > highest)
+                highest = n;
+        }
+        closedir(d);
+    }
+
+    snprintf(out, size, "recordings/config%d", highest + 1);
+    if (mkdir(out, 0755) != 0) {
+        perror("Kunne ikke oprette sessionmappe");
+        return -1;
+    }
+    return 0;
+}
+
+int storage_start(const char *dir, const char *participant, const char *session_id, const char *timestamp){    
     char path[128];
     storage_stop();
-    mkdir("recordings", 0755);
-    snprintf(path, sizeof(path), "recordings/session_%s.jsonl", session_id);
+    snprintf(path, sizeof(path), "%s/session_%s.jsonl", dir, session_id);
     session_file = fopen(path, "w");
     if (!session_file) {
         perror("Kunne ikke oprette fil");

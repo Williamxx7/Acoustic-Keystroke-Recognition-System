@@ -37,6 +37,7 @@ struct per_session_data {char input[MAX_IN]; size_t input_len;};
 //til emils kode 
 static struct audio_recorder recorder = {0};
 static char wav_path[160];
+static char session_dir[128];
 
 static void stop_handler(int sig){
     running = 0;
@@ -170,11 +171,13 @@ static void browser_message(const char *data, size_t length){
         snprintf(participant, sizeof(participant), "%s", get_string(message, "participant", "Unknown"));
         timestamp_file_creation(session_id, sizeof(session_id));
                 
-        if (storage_start(participant, session_id, ts) == 0) {
+        if (storage_new_session_dir(session_dir, sizeof(session_dir)) != 0) {
+            send_error("kunne ikke oprette sessionmappe");
+        } else if (storage_start(session_dir, participant, session_id, ts) == 0) {
             recording = 1;
             storage_add_text(get_int(message, "text_id"), get_string(message, "text", ""), ts);
         
-             snprintf(wav_path, sizeof(wav_path), "recordings/session_%s.wav", session_id);
+            snprintf(wav_path, sizeof(wav_path), "%s/session_%s.wav", session_dir, session_id);            
             //starter mikrofon via emils kode
             if (configure_wavFile(&recorder, wav_path) != 0) {
                 send_error("kunne ikke oprette wav-fil");
@@ -198,8 +201,6 @@ static void browser_message(const char *data, size_t length){
 
 
 }
-    
-
 
 
 //skal kunne kaldes fra keyboard.c for keypress
