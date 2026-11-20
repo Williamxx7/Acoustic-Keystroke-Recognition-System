@@ -8,7 +8,7 @@ from melTransformer import cfg
 
 
 def gem_spektrogrammer(wav_path, out_dir="spektrogrammer"):
-    out = Path(out_dir)
+    out = Path(wav_path).parent / "spektrogrammer"
     out.mkdir(exist_ok=True)
 
     onsets, segments = segment_file(wav_path, cfg)
