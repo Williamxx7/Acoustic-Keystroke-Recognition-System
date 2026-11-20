@@ -1,6 +1,7 @@
 #include "keyboard.h"
 #include "storage.h"
 #include "optag.h"
+#include "mel_bridge.h"
 #include <libwebsockets.h>
 #include <cjson/cJSON.h>
 #include <signal.h>
@@ -137,10 +138,21 @@ static void send_error(const char *message){
 }
 
 static void stop_recording(void){
+    if (!recording) return;
+
     recording = 0;
     reset_samples();
-    stop_record(&recorder);
+    int recording_stop_result = stop_record(&recorder);
     storage_stop();
+
+    if (recording_stop_result != 0) {
+        send_error("Kunne ikke afslutte optagelsen");
+        return;
+    }
+
+    int python_processing_result = process_recording_with_python(wav_path);
+    if (python_processing_result != 0)
+        send_error("Python mel-behandling fejlede");
 }
 
 //henter tekstbesked fra json
