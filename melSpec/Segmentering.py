@@ -4,7 +4,11 @@ from melTransformer import mel_transform, cfg   # genbruger din transformer + co
 
 
 def find_onsets(audio, sr): # Find positionerne (i samples) hvor der skete et klik.
-    return librosa.onset.onset_detect(y=audio, sr=sr, units="samples")
+    onsets = librosa.onset.onset_detect(y=audio, sr=sr, units="samples")
+    for i in onsets:
+        if i %2 == 0:
+            onsets.remove(i)
+    return onsets
 
 
 def cut_window(audio, onset_sample, cfg): # Klip et vindue omkring et onset
