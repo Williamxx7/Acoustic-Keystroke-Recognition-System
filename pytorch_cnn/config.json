@@ -1,0 +1,20 @@
+{
+  "epochs": 30,
+  "batch_size": 32,
+  "learning_rate": 0.001,
+  "seed": 42,
+  "validation_fraction": 0.2,
+  "spectrogram": {
+    "sample_rate_hz": 48000,
+    "n_fft": 1024,
+    "hop_length": 256,
+    "n_mels": 64,
+    "f_min_hz": 0,
+    "f_max_hz": 24000,
+    "log_scale": "power_to_db",
+    "normalization": "per_sample_zscore",
+    "target_samples": 9600,
+    "pre_ms": 10,
+    "onset_selection": "every_other"
+  }
+}
